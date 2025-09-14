@@ -2,6 +2,8 @@
 
 Notionのデータベース（保有資産）と連動し、日々の資産評価額スナップショットを記録・可視化する最小構成のアプリです。
 
+> Deployment note: Triggered Vercel deploy via GitHub push on 2025-09-14.
+
 - バックエンド: Node.js + Express + TypeScript
 - 連携: Notion API（公式 SDK）
 - 価格取得: CoinGecko（暗号資産）/ Yahoo Finance Quote API（株式・ETF）
