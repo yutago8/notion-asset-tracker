@@ -65,18 +65,28 @@
 
         // Snapshots chart
         const snap = await fetchJSON('/api/snapshots');
-        const items = snap.items || [];
-        const labels = items.map(i=>i.dateISO);
+        const all = snap.items || [];
+        const currentYear = String(new Date().getFullYear());
+        const yearItems = all.filter(i => (i.dateISO||'').startsWith(currentYear));
+        const items = yearItems.length ? yearItems : all;
+        const labels = items.map(i=> (i.dateISO||'').slice(5)); // MM-DD for readability
         const values = items.map(i=>i.totalUSD);
-        const last = items[items.length-1];
+        const last = all[all.length-1];
         document.getElementById('last-updated').textContent = last ? `Last: ${last.dateISO}` : '';
         document.getElementById('total').textContent = last ? `Total: ${nf.format(last.totalUSD)}` : '';
         const ch = last && typeof last.changeUSD === 'number' ? `${last.changeUSD>=0?'+':''}${nf.format(last.changeUSD)} (${(last.changePct ?? 0).toFixed(2)}%)` : '';
         document.getElementById('change').textContent = ch;
-        new Chart(document.getElementById('chart'), {
+        const chartEl = document.getElementById('chart');
+        new Chart(chartEl, {
           type:'line', data:{ labels, datasets:[{ label:'Total', data:values, borderColor:'#2563eb', backgroundColor:'rgba(37,99,235,0.15)', fill:true, tension:0.2 }]},
-          options:{ responsive:true, plugins:{ legend:{display:false} }, interaction:{ mode:'index', intersect:false }, scales:{ y:{ ticks:{ callback:v=>nf.format(Number(v)) } } } }
+          options:{ responsive:true, plugins:{ legend:{display:false}, title:{ display:true, text: yearItems.length ? `${currentYear} – Total` : 'Total' } }, interaction:{ mode:'index', intersect:false }, scales:{ x:{ ticks:{ callback:(v,idx)=>labels[idx] } }, y:{ ticks:{ callback:v=>nf.format(Number(v)) } } } }
         });
+        if (!all.length) {
+          const ctx = chartEl.getContext('2d');
+          ctx.fillStyle = '#666';
+          ctx.font = '14px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial';
+          ctx.fillText('No snapshots yet. Add a row in Notion or call /api/cron-snapshot.', 12, 24);
+        }
 
         // Transactions
         try{
