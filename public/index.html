@@ -69,6 +69,16 @@
         <div class="value" id="kpi-total">—</div>
         <div class="sub" id="kpi-sub"></div>
       </div>
+      <div class="controls" style="gap:8px; align-items:center;">
+        <strong style="font-size:13px;">Data</strong>
+        <span id="st-config" class="muted">config: …</span>
+        <span id="st-snaps" class="muted">snapshots: …</span>
+        <span id="st-tr" class="muted">transactions: …</span>
+        <span id="st-log" class="muted">asset-log: …</span>
+        <button id="btn-reload" style="margin-left:auto;">Reload</button>
+        <button id="btn-sync-cash" title="Sync Asset Log from Verified transactions">Sync Cash</button>
+        <button id="btn-sync-forecast" title="Sync Asset Log from Amount Confirmed transactions">Sync Forecast</button>
+      </div>
 
       <div style="position:relative; width:100%;">
         <canvas id="chart" height="320"></canvas>
@@ -147,14 +157,18 @@
         }
 
         async function main(){
-          const cfg = await fetchJSON('/api/config');
+          // Status helpers
+          const st = (id, msg)=>{ const el=document.getElementById(id); if(el) el.textContent = msg; };
+          st('st-config','config: loading'); st('st-snaps','snapshots: loading'); st('st-tr','transactions: loading'); st('st-log','asset-log: idle');
+
+          const cfg = await fetchJSON('/api/config').then(j=>{ st('st-config','config: ok'); return j; }).catch(e=>{ st('st-config','config: error'); throw e; });
           const nf = new Intl.NumberFormat(undefined,{ style:'currency', currency: cfg.baseCurrency || 'JPY' });
 
           // Load data
-          const snap = await fetchJSON('/api/snapshots');
+          const snap = await fetchJSON('/api/snapshots').then(j=>{ st('st-snaps',`snapshots: ${j.items?.length||0}`); return j; }).catch(e=>{ st('st-snaps','snapshots: error'); return { items: [] }; });
           const SNAP_ALL = (snap.items || []).sort(byDateAsc);
           let TR_ALL = [];
-          try { const tr = await fetchJSON('/api/transactions'); TR_ALL = tr.items || []; } catch (_) { TR_ALL = []; }
+          try { const tr = await fetchJSON('/api/transactions'); TR_ALL = tr.items || []; st('st-tr',`transactions: ${TR_ALL.length}`); } catch (_) { TR_ALL = []; st('st-tr','transactions: error'); }
 
           // Current KPI
           let currentTotal = null; let currentChange = null; let currentFrom = '';
@@ -195,6 +209,17 @@
           });
           ysel.addEventListener('change', () => { renderChart(SNAP_ALL, nf); renderTables(TR_ALL); updateHeadings(); });
           msel.addEventListener('change', () => { renderChart(SNAP_ALL, nf); renderTables(TR_ALL); updateHeadings(); });
+
+          // Reload & Sync buttons
+          document.getElementById('btn-reload').onclick = ()=> location.reload();
+          async function callSync(mode){
+            const hdrs = {}; const sec = (localStorage.getItem('WRITE_SECRET')||'').trim(); if (sec) hdrs['Authorization'] = 'Bearer '+sec;
+            st('st-log',`asset-log: syncing(${mode})…`);
+            try { const r = await fetch(`/api/asset-log-sync?mode=${mode}`, { headers: hdrs }); const j = await r.json(); st('st-log',`asset-log: synced(${mode}) ${j.count||0}`); await renderChart(SNAP_ALL, nf); await renderTables(TR_ALL); }
+            catch(e){ st('st-log','asset-log: sync error'); }
+          }
+          document.getElementById('btn-sync-cash').onclick = ()=> callSync('cash');
+          document.getElementById('btn-sync-forecast').onclick = ()=> callSync('forecast');
 
           function updateHeadings(){
             const year = ysel.value, month = msel.value; const ym = month==='all' ? year : `${year}-${month}`;
