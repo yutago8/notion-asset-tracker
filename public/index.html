@@ -117,6 +117,95 @@
         }
       }
       main();
+  </script>
+    <script>
+      (async function(){
+        const unitSel = document.getElementById('unit-select');
+        const yearSel = document.getElementById('year-select');
+        const monthSel = document.getElementById('month-select');
+        if (!unitSel || !yearSel || !monthSel) return;
+
+        async function fetchJSON(url){ const r = await fetch(url); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
+        function fmtNumber(n){ return new Intl.NumberFormat('ja-JP',{ maximumFractionDigits: 2 }).format(n); }
+        function getUnit(){ const div = Number(unitSel.value) || 1; const label = unitSel.options[unitSel.selectedIndex].text; return { div, label }; }
+        function nextMonth(ym){ const [y,m] = ym.split('-').map(Number); const d = new Date(y, m-1, 1); d.setMonth(d.getMonth()+1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+        function renderTable(el, rows, unit){
+          const th = `<tr class="muted"><td>Date</td><td>Title</td><td style="text-align:right;">Amount (${unit.label})</td></tr>`;
+          const tr = rows.map(r=>{
+            const val = (r.amount||0)/unit.div;
+            return `<tr><td>${r.date}${r.dueDate?`<div class=muted>due ${r.dueDate}</div>`:''}</td><td>${r.title}</td><td style="text-align:right;">${fmtNumber(val)}</td></tr>`;
+          }).join('');
+          el.innerHTML = th + tr;
+        }
+
+        const cfg = await fetchJSON('/api/config');
+        const nf = new Intl.NumberFormat(undefined,{ style:'currency', currency: cfg.baseCurrency || 'JPY' });
+        const snap = await fetchJSON('/api/snapshots');
+        const SNAP_ALL = (snap.items||[]).slice().sort((a,b)=> (a.dateISO||'').localeCompare(b.dateISO||''));
+        let TR_ALL = [];
+        try { const tr = await fetchJSON('/api/transactions'); TR_ALL = tr.items||[]; } catch(_) {}
+
+        // Fill year select
+        const yearsSet = new Set(SNAP_ALL.map(i=> (i.dateISO||'').slice(0,4)));
+        TR_ALL.forEach(t=> yearsSet.add((t.date||'').slice(0,4)));
+        const years = Array.from(yearsSet).filter(Boolean).sort();
+        const nowY = String(new Date().getFullYear());
+        const effY = years.includes(nowY) ? nowY : (years[years.length-1] || nowY);
+        yearSel.innerHTML = years.map(y=> `<option value="${y}" ${y===effY?'selected':''}>${y}</option>`).join('');
+        const nowM = String(new Date().getMonth()+1).padStart(2,'0');
+        monthSel.value = years.includes(nowY) ? nowM : 'all';
+
+        unitSel.addEventListener('change', render);
+        yearSel.addEventListener('change', render);
+        monthSel.addEventListener('change', render);
+        render();
+
+        function render(){
+          const unit = getUnit();
+          const year = yearSel.value;
+          const month = monthSel.value; // 'all' or 'MM'
+          // Chart
+          const filteredSn = SNAP_ALL.filter(i=> (i.dateISO||'').startsWith(year+'-')).filter(i=> month==='all' ? true : (i.dateISO||'').slice(5,7)===month);
+          const labels = filteredSn.map(i=> month==='all' ? (i.dateISO||'').slice(5) : (i.dateISO||'').slice(8));
+          const values = filteredSn.map(i=> (i.totalUSD||0)/unit.div);
+          const last = SNAP_ALL[SNAP_ALL.length-1];
+          document.getElementById('last-updated').textContent = last ? `Last: ${last.dateISO}` : '';
+          document.getElementById('total').textContent = last ? `Total: ${nf.format(last.totalUSD)}` : '';
+          const ch = last && typeof last.changeUSD === 'number' ? `${last.changeUSD>=0?'+':''}${nf.format(last.changeUSD)} (${(last.changePct ?? 0).toFixed(2)}%)` : '';
+          document.getElementById('change').textContent = ch;
+          const chartEl = document.getElementById('chart');
+          chartEl.width = chartEl.width; // reset canvas
+          if (filteredSn.length) {
+            new Chart(chartEl, { type:'line', data:{ labels, datasets:[{ label:`Total (${unit.label})`, data:values, borderColor:'#2563eb', backgroundColor:'rgba(37,99,235,0.15)', fill:true, tension:0.2 }]}, options:{ responsive:true, plugins:{ legend:{display:false}, title:{ display:true, text: `${year}${month==='all'?'':'-'+month} – Total (${unit.label})` } }, interaction:{ mode:'index', intersect:false }, scales:{ y:{ ticks:{ callback:v=>`${fmtNumber(Number(v))} ${unit.label}` } } } } });
+          } else {
+            const ctx = chartEl.getContext('2d');
+            ctx.fillStyle = '#666';
+            ctx.font = '14px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial';
+            ctx.fillText('No snapshots to display for selected period.', 12, 24);
+          }
+
+          // Transactions
+          const ym = month==='all' ? null : `${year}-${month}`;
+          const now = new Date();
+          const inYear = (d)=> (d||'').startsWith(year+'-');
+          const inYM = (d)=> ym ? (d||'').startsWith(ym) : true;
+          const forecast = TR_ALL.filter(x=> x.amountConfirmed && inYear(x.date) && inYM(x.date));
+          const cash = TR_ALL.filter(x=> x.verified && inYear(x.date) && inYM(x.date));
+          const due = TR_ALL.filter(x=> x.isDueSoon).sort((a,b)=> (a.dueDate||'').localeCompare(b.dueDate||''));
+          const nextYm = ym ? nextMonth(ym) : null;
+          const watch = TR_ALL.filter(x=> x.gte10k && inYear(x.date) && (ym ? (inYM(x.date) || (x.date||'').startsWith(nextYm)) : true));
+          const unconfirmed = TR_ALL.filter(x=> inYear(x.date) && inYM(x.date) && (!x.amountConfirmed || (x.dueDate && new Date(x.dueDate) < now)));
+
+          const unitLabel = getUnit();
+          document.getElementById('forecast-total').textContent = `Total: ${fmtNumber(forecast.reduce((s,x)=>s+(x.amount||0),0)/unitLabel.div)} ${unitLabel.label}`;
+          document.getElementById('cash-total').textContent = `Total: ${fmtNumber(cash.reduce((s,x)=>s+(x.amount||0),0)/unitLabel.div)} ${unitLabel.label}`;
+          renderTable(document.getElementById('tbl-forecast'), forecast.slice(0,30), unitLabel);
+          renderTable(document.getElementById('tbl-cash'), cash.slice(0,30), unitLabel);
+          renderTable(document.getElementById('tbl-due'), due.slice(0,30), unitLabel);
+          renderTable(document.getElementById('tbl-watch'), watch.slice(0,30), unitLabel);
+          renderTable(document.getElementById('tbl-unconfirmed'), unconfirmed.slice(0,30), unitLabel);
+        }
+      })();
     </script>
   </body>
   </html>
