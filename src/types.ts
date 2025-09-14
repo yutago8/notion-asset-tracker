@@ -18,3 +18,14 @@ export interface Snapshot {
   changePct?: number;
 }
 
+export interface Transaction {
+  id: string;
+  title: string;
+  date: string; // ISO date
+  amount: number; // negative for expense, positive for income
+  amountConfirmed: boolean;
+  verified: boolean;
+  dueDate?: string; // ISO date
+  transactionType?: string; // e.g., Expense/Income
+  paymentMethod?: string;
+}

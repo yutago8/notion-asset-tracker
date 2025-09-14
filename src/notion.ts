@@ -1,6 +1,6 @@
 import { Client } from '@notionhq/client';
 import { config } from './config';
-import type { Holding, Snapshot } from './types';
+import type { Holding, Snapshot, Transaction } from './types';
 
 const notion = new Client({ auth: config.notionToken });
 
@@ -44,6 +44,17 @@ function getNumber(page: any, propName: string): number | undefined {
   const prop = page.properties?.[propName];
   const v = prop?.number;
   return typeof v === 'number' ? v : undefined;
+}
+
+function getCheckbox(page: any, propName: string): boolean {
+  const prop = page.properties?.[propName];
+  return !!prop?.checkbox;
+}
+
+function getDate(page: any, propName: string): string | undefined {
+  const prop = page.properties?.[propName];
+  const start = prop?.date?.start as string | undefined;
+  return start || undefined;
 }
 
 export async function fetchHoldings(): Promise<Holding[]> {
@@ -119,4 +130,37 @@ export async function createSnapshot(s: Snapshot) {
       ...(typeof s.changePct === 'number' ? { [p.changePct]: { number: s.changePct } } : {}),
     },
   } as any);
+}
+
+export async function fetchTransactions(limit = 1000): Promise<Transaction[]> {
+  if (!config.transactionsDbId) throw new Error('NOTION_TRANSACTIONS_DB_ID is not set');
+  const p = config.transactionProps;
+  const items: Transaction[] = [];
+  let cursor: string | undefined = undefined;
+  do {
+    const res = await notion.databases.query({
+      database_id: config.transactionsDbId,
+      start_cursor: cursor,
+      page_size: 100,
+      sorts: [
+        { property: p.date, direction: 'descending' as const },
+      ],
+    } as any);
+    for (const page of res.results as any[]) {
+      const id = page.id as string;
+      const title = getTitlePlainText(page, p.title) || '(untitled)';
+      const date = getDate(page, p.date);
+      const amount = getNumber(page, p.amount) ?? 0;
+      const amountConfirmed = getCheckbox(page, p.amountConfirmed);
+      const verified = getCheckbox(page, p.verified);
+      const dueDate = getDate(page, p.dueDate);
+      const transactionType = getSelectName(page, p.transactionType) || undefined;
+      const paymentMethod = getSelectName(page, p.paymentMethod) || undefined;
+      if (!date) continue;
+      items.push({ id, title, date, amount, amountConfirmed, verified, dueDate, transactionType, paymentMethod });
+      if (items.length >= limit) break;
+    }
+    cursor = (res as any).next_cursor || undefined;
+  } while (cursor && items.length < limit);
+  return items;
 }

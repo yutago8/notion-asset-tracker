@@ -5,6 +5,7 @@ export const config = {
   notionToken: process.env.NOTION_TOKEN || '',
   holdingsDbId: process.env.NOTION_HOLDINGS_DB_ID || '',
   snapshotsDbId: process.env.NOTION_SNAPSHOTS_DB_ID || '',
+  transactionsDbId: process.env.NOTION_TRANSACTIONS_DB_ID || '',
   baseCurrency: (process.env.BASE_CURRENCY || 'USD').toUpperCase(),
   props: {
     name: process.env.PROP_NAME || 'Name',
@@ -22,6 +23,16 @@ export const config = {
     changeUSD: process.env.SNAPSHOT_PROP_CHANGE_USD || 'Change USD',
     changePct: process.env.SNAPSHOT_PROP_CHANGE_PCT || 'Change %',
   },
+  transactionProps: {
+    title: process.env.TR_PROP_TITLE || 'Title',
+    date: process.env.TR_PROP_DATE || 'Date',
+    amount: process.env.TR_PROP_AMOUNT || 'Amount',
+    amountConfirmed: process.env.TR_PROP_AMOUNT_CONFIRMED || 'Amount Confirmed',
+    verified: process.env.TR_PROP_VERIFIED || 'Verified',
+    dueDate: process.env.TR_PROP_DUE_DATE || 'Due Date',
+    transactionType: process.env.TR_PROP_TRANSACTION_TYPE || 'Transaction Type',
+    paymentMethod: process.env.TR_PROP_PAYMENT_METHOD || 'Payment Method',
+  },
 };
 
 export function assertConfig() {
@@ -33,4 +44,3 @@ export function assertConfig() {
     throw new Error(`Missing required env vars: ${missing.join(', ')}`);
   }
 }
-

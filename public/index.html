@@ -16,58 +16,95 @@
   </head>
   <body>
     <div class="header">
-      <h1 style="margin:0;">Portfolio</h1>
+      <h1 style="margin:0;">Dashboard</h1>
       <div class="muted" id="last-updated"></div>
     </div>
     <div style="margin: 12px 0;">
       <span class="stat" id="total"></span>
       <span class="stat" id="change"></span>
     </div>
-    <canvas id="chart" height="320"></canvas>
+    <canvas id="chart" height="280"></canvas>
+    <hr style="margin:24px 0;"/>
+    <div style="display:flex; gap:24px; flex-wrap:wrap;">
+      <div style="min-width:320px;">
+        <h3 style="margin:8px 0;">This Month – Forecast</h3>
+        <div class="muted" id="forecast-total"></div>
+        <table id="tbl-forecast" border="0" cellpadding="6"></table>
+      </div>
+      <div style="min-width:320px;">
+        <h3 style="margin:8px 0;">This Month – Cash</h3>
+        <div class="muted" id="cash-total"></div>
+        <table id="tbl-cash" border="0" cellpadding="6"></table>
+      </div>
+    </div>
+    <div style="display:flex; gap:24px; flex-wrap:wrap; margin-top:24px;">
+      <div style="min-width:320px;">
+        <h3 style="margin:8px 0;">Next 60 Days – Due</h3>
+        <table id="tbl-due" border="0" cellpadding="6"></table>
+      </div>
+      <div style="min-width:320px;">
+        <h3 style="margin:8px 0;">&gt;=10k – Watchlist</h3>
+        <table id="tbl-watch" border="0" cellpadding="6"></table>
+      </div>
+      <div style="min-width:320px;">
+        <h3 style="margin:8px 0;">Unconfirmed / To Check</h3>
+        <table id="tbl-unconfirmed" border="0" cellpadding="6"></table>
+      </div>
+    </div>
     <script>
-      async function main() {
-        const cfgRes = await fetch('/api/config');
-        const cfg = await cfgRes.json();
-        const baseCurrency = (cfg.baseCurrency || 'USD');
+      async function fetchJSON(url){ const r = await fetch(url); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
+      function renderTable(el, rows, nf){
+        const th = `<tr class="muted"><td>Date</td><td>Title</td><td style="text-align:right;">Amount</td></tr>`;
+        const tr = rows.map(r=>`<tr><td>${r.date}${r.dueDate?`<div class=muted>due ${r.dueDate}</div>`:''}</td><td>${r.title}</td><td style="text-align:right;">${nf.format(r.amount)}</td></tr>`).join('');
+        el.innerHTML = th + tr;
+      }
+      async function main(){
+        const cfg = await fetchJSON('/api/config');
+        const baseCurrency = cfg.baseCurrency || 'USD';
+        const nf = new Intl.NumberFormat(undefined,{style:'currency',currency:baseCurrency});
 
-        const res = await fetch('/api/snapshots');
-        const { items } = await res.json();
-        const labels = items.map(i => i.dateISO);
-        const values = items.map(i => i.totalUSD);
-        const last = items[items.length - 1];
-        const nf = new Intl.NumberFormat(undefined, { style: 'currency', currency: baseCurrency });
+        // Snapshots chart
+        const snap = await fetchJSON('/api/snapshots');
+        const items = snap.items || [];
+        const labels = items.map(i=>i.dateISO);
+        const values = items.map(i=>i.totalUSD);
+        const last = items[items.length-1];
         document.getElementById('last-updated').textContent = last ? `Last: ${last.dateISO}` : '';
         document.getElementById('total').textContent = last ? `Total: ${nf.format(last.totalUSD)}` : '';
-        const ch = last && typeof last.changeUSD === 'number' ? `${last.changeUSD >= 0 ? '+' : ''}${nf.format(last.changeUSD)} (${(last.changePct ?? 0).toFixed(2)}%)` : '';
+        const ch = last && typeof last.changeUSD === 'number' ? `${last.changeUSD>=0?'+':''}${nf.format(last.changeUSD)} (${(last.changePct ?? 0).toFixed(2)}%)` : '';
         document.getElementById('change').textContent = ch;
-
-        const ctx = document.getElementById('chart');
-        new Chart(ctx, {
-          type: 'line',
-          data: {
-            labels,
-            datasets: [{
-              label: 'Total',
-              data: values,
-              borderColor: '#2563eb',
-              backgroundColor: 'rgba(37, 99, 235, 0.15)',
-              fill: true,
-              tension: 0.2,
-            }]
-          },
-          options: {
-            responsive: true,
-            plugins: {
-              legend: { display: false },
-              tooltip: { mode: 'index', intersect: false },
-            },
-            interaction: { mode: 'index', intersect: false },
-            scales: {
-              x: { display: true },
-              y: { display: true, ticks: { callback: (v) => nf.format(Number(v)) } }
-            }
-          }
+        new Chart(document.getElementById('chart'), {
+          type:'line', data:{ labels, datasets:[{ label:'Total', data:values, borderColor:'#2563eb', backgroundColor:'rgba(37,99,235,0.15)', fill:true, tension:0.2 }]},
+          options:{ responsive:true, plugins:{ legend:{display:false} }, interaction:{ mode:'index', intersect:false }, scales:{ y:{ ticks:{ callback:v=>nf.format(Number(v)) } } } }
         });
+
+        // Transactions
+        try{
+          const tr = await fetchJSON('/api/transactions');
+          const items = tr.items || [];
+          const now = new Date();
+          const ym = new Intl.DateTimeFormat('sv-SE',{year:'numeric',month:'2-digit'}).format(now); // YYYY-MM
+          const isThisMonth = (d)=> (d||'').startsWith(ym);
+          const forecast = items.filter(x=> x.amountConfirmed && isThisMonth(x.date));
+          const cash = items.filter(x=> x.verified && isThisMonth(x.date));
+          const due = items.filter(x=> x.isDueSoon).sort((a,b)=> (a.dueDate||'').localeCompare(b.dueDate||''));
+          const watch = items.filter(x=> x.gte10k && (isThisMonth(x.date) || (x.date||'').slice(0,7) === nextMonth(ym)) );
+          const unconfirmed = items.filter(x=> !x.amountConfirmed || (x.dueDate && new Date(x.dueDate) < now));
+
+          document.getElementById('forecast-total').textContent = `Total: ${nf.format(forecast.reduce((s,x)=>s+x.amount,0))}`;
+          document.getElementById('cash-total').textContent = `Total: ${nf.format(cash.reduce((s,x)=>s+x.amount,0))}`;
+          renderTable(document.getElementById('tbl-forecast'), forecast.slice(0,30), nf);
+          renderTable(document.getElementById('tbl-cash'), cash.slice(0,30), nf);
+          renderTable(document.getElementById('tbl-due'), due.slice(0,30), nf);
+          renderTable(document.getElementById('tbl-watch'), watch.slice(0,30), nf);
+          renderTable(document.getElementById('tbl-unconfirmed'), unconfirmed.slice(0,30), nf);
+        }catch(e){
+          console.warn('transactions not available', e);
+        }
+
+        function nextMonth(ym){
+          const [y,m] = ym.split('-').map(Number); const d = new Date(y, m-1, 1); d.setMonth(d.getMonth()+1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+        }
       }
       main();
     </script>
