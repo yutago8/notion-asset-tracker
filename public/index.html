@@ -100,6 +100,10 @@
           <h3>Unconfirmed / To Check</h3>
           <table id="tbl-unconfirmed" border="0" cellpadding="6"></table>
         </div>
+        <div class="col">
+          <h3>Asset Log (Changes)</h3>
+          <table id="tbl-assetlog" border="0" cellpadding="6"></table>
+        </div>
       </div>
 
       <hr style="margin:24px 0;"/>
@@ -233,7 +237,7 @@
 
           function varAccent(){ return getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#2563eb'; }
 
-          function renderTables(TR){
+          async function renderTables(TR){
             const year = ysel.value; const month = msel.value; const ym = month==='all'? null : `${year}-${month}`;
             const now = new Date(); const inYear = d => (d||'').startsWith(year+'-'); const inYM = d => ym ? (d||'').startsWith(ym) : true;
             const u = getUnit();
@@ -250,6 +254,11 @@
             renderTable(document.getElementById('tbl-due'), due.slice(0,30), u);
             renderTable(document.getElementById('tbl-watch'), watch.slice(0,30), u);
             renderTable(document.getElementById('tbl-unconfirmed'), unconfirmed.slice(0,30), u);
+
+            // Asset Log table
+            const logs = await getAssetLogFor(year);
+            const logsFiltered = logs.filter(i=> inYear(i.dateISO) && (ym ? (i.dateISO||'').startsWith(ym) : true)).map(i=> ({ date: i.dateISO, title: i.mode||'', amount: i.change }));
+            renderTable(document.getElementById('tbl-assetlog'), logsFiltered.slice(0,60), u);
           }
 
           // initial
