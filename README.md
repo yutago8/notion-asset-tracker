@@ -116,3 +116,4 @@ SNAPSHOT_PROP_CHANGE_USD=Change JPY
 - 資産クラス別の寄与度分解、銘柄別チャート
 - ベンチマーク（S&P500等）との比較
 - 多通貨・多口座の厳密対応、手数料・配当の反映
+\n> Asset Log sync enabled on 2025-09-14T12:14:57Z.
