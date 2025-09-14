@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Notion Asset Tracker</title>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 24px; }
+      .header { display:flex; align-items:center; gap:12px; }
+      .muted { color: #666; }
+      .stat { font-size: 14px; margin-right: 16px; }
+      #chart { max-width: 900px; }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1 style="margin:0;">Portfolio</h1>
+      <div class="muted" id="last-updated"></div>
+    </div>
+    <div style="margin: 12px 0;">
+      <span class="stat" id="total"></span>
+      <span class="stat" id="change"></span>
+    </div>
+    <canvas id="chart" height="320"></canvas>
+    <script>
+      async function main() {
+        const cfgRes = await fetch('/api/config');
+        const cfg = await cfgRes.json();
+        const baseCurrency = (cfg.baseCurrency || 'USD');
+
+        const res = await fetch('/api/snapshots');
+        const { items } = await res.json();
+        const labels = items.map(i => i.dateISO);
+        const values = items.map(i => i.totalUSD);
+        const last = items[items.length - 1];
+        const nf = new Intl.NumberFormat(undefined, { style: 'currency', currency: baseCurrency });
+        document.getElementById('last-updated').textContent = last ? `Last: ${last.dateISO}` : '';
+        document.getElementById('total').textContent = last ? `Total: ${nf.format(last.totalUSD)}` : '';
+        const ch = last && typeof last.changeUSD === 'number' ? `${last.changeUSD >= 0 ? '+' : ''}${nf.format(last.changeUSD)} (${(last.changePct ?? 0).toFixed(2)}%)` : '';
+        document.getElementById('change').textContent = ch;
+
+        const ctx = document.getElementById('chart');
+        new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [{
+              label: 'Total',
+              data: values,
+              borderColor: '#2563eb',
+              backgroundColor: 'rgba(37, 99, 235, 0.15)',
+              fill: true,
+              tension: 0.2,
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              legend: { display: false },
+              tooltip: { mode: 'index', intersect: false },
+            },
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+              x: { display: true },
+              y: { display: true, ticks: { callback: (v) => nf.format(Number(v)) } }
+            }
+          }
+        });
+      }
+      main();
+    </script>
+  </body>
+  </html>
