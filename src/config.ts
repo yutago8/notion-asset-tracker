@@ -5,6 +5,7 @@ export const config = {
   notionToken: process.env.NOTION_TOKEN || '',
   holdingsDbId: process.env.NOTION_HOLDINGS_DB_ID || '',
   snapshotsDbId: process.env.NOTION_SNAPSHOTS_DB_ID || '',
+  assetLogDbId: process.env.NOTION_ASSET_LOG_DB_ID || '',
   transactionsDbId: process.env.NOTION_TRANSACTIONS_DB_ID || '',
   baseCurrency: (process.env.BASE_CURRENCY || 'USD').toUpperCase(),
   props: {
@@ -22,6 +23,12 @@ export const config = {
     totalUSD: process.env.SNAPSHOT_PROP_TOTAL_USD || 'Total USD',
     changeUSD: process.env.SNAPSHOT_PROP_CHANGE_USD || 'Change USD',
     changePct: process.env.SNAPSHOT_PROP_CHANGE_PCT || 'Change %',
+  },
+  assetLogProps: {
+    title: process.env.ALOG_PROP_TITLE || 'Name',
+    date: process.env.ALOG_PROP_DATE || 'Date',
+    change: process.env.ALOG_PROP_CHANGE || 'Change',
+    mode: process.env.ALOG_PROP_MODE || 'Mode',
   },
   transactionProps: {
     title: process.env.TR_PROP_TITLE || 'Title',

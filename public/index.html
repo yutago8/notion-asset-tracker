@@ -70,7 +70,9 @@
         <div class="sub" id="kpi-sub"></div>
       </div>
 
-      <canvas id="chart" height="280"></canvas>
+      <div style="position:relative; width:100%;">
+        <canvas id="chart" height="320"></canvas>
+      </div>
       <hr style="margin:24px 0;"/>
 
       <div class="cols">
@@ -196,16 +198,34 @@
             document.getElementById('h-cash').textContent = `Cash – ${ym}`;
           }
 
-          function renderChart(SNAPS, nf){
+          const LOG_CACHE = new Map(); // key: year -> entries
+          async function getAssetLogFor(year){
+            if (LOG_CACHE.has(year)) return LOG_CACHE.get(year);
+            try { const r = await fetch(`/api/asset-log?from=${year}-01-01&to=${year}-12-31`); const j = await r.json(); const arr = j.items||[]; LOG_CACHE.set(year, arr); return arr; } catch(_) { LOG_CACHE.set(year, []); return []; }
+          }
+
+          async function renderChart(SNAPS, nf){
             const year = ysel.value; const month = msel.value;
             const filtered = SNAPS.filter(i=> (i.dateISO||'').startsWith(year+'-')).filter(i=> month==='all' ? true : (i.dateISO||'').slice(5,7)===month);
-            const labels = filtered.map(i=> month==='all' ? (i.dateISO||'').slice(5) : (i.dateISO||'').slice(8));
+            // Fetch asset log for year and build union labels
+            const logs = await getAssetLogFor(year);
+            const logsFiltered = logs.filter(i=> month==='all' ? true : (i.dateISO||'').slice(5,7)===month);
+            const allDatesSet = new Set([ ...filtered.map(i=>i.dateISO), ...logsFiltered.map(i=>i.dateISO) ]);
+            const allDates = Array.from(allDatesSet).sort();
+            const labels = allDates.map(d=> month==='all' ? d.slice(5) : d.slice(8));
             const u = getUnit();
-            const values = filtered.map(i=> (i.totalUSD||0)/u.div);
+            const totalMap = new Map(filtered.map(i=> [i.dateISO, (i.totalUSD||0)/u.div]));
+            const values = allDates.map(d=> totalMap.get(d) ?? null);
+            // Bar dataset for changes
+            const changeMap = new Map(logsFiltered.map(i=> [i.dateISO, (i.change||0)/u.div]));
+            const changes = allDates.map(d=> changeMap.get(d) ?? 0);
             const chartEl = document.getElementById('chart');
             chartEl.width = chartEl.width; // reset
-            if (filtered.length) {
-              new Chart(chartEl, { type:'line', data:{ labels, datasets:[{ label:`Total (${u.label})`, data:values, borderColor:varAccent(), backgroundColor:'rgba(37,99,235,0.15)', fill:true, tension:0.2 }]}, options:{ responsive:true, plugins:{ legend:{display:false}, title:{ display:true, text: `${year}${month==='all'?'':'-'+month} – Total (${u.label})` } }, interaction:{ mode:'index', intersect:false }, scales:{ y:{ ticks:{ callback:v=>`${fmtNumber(Number(v))} ${u.label}` } } } } });
+            if (allDates.length) {
+              new Chart(chartEl, { type:'bar', data:{ labels, datasets:[
+                { type:'line', label:`Total (${u.label})`, data:values, borderColor:varAccent(), backgroundColor:'rgba(37,99,235,0.15)', fill:true, tension:0.2, yAxisID:'y' },
+                { type:'bar', label:`Change (${u.label})`, data:changes, backgroundColor:'rgba(220,38,38,0.35)', borderColor:'#dc2626', yAxisID:'y1' }
+              ]}, options:{ responsive:true, plugins:{ legend:{display:true}, title:{ display:true, text: `${year}${month==='all'?'':'-'+month} – Total & Changes (${u.label})` } }, interaction:{ mode:'index', intersect:false }, scales:{ y:{ position:'left', ticks:{ callback:v=>`${fmtNumber(Number(v))} ${u.label}` } }, y1:{ position:'right', grid:{ drawOnChartArea:false }, ticks:{ callback:v=>`${fmtNumber(Number(v))} ${u.label}` } } } } });
             } else {
               const ctx = chartEl.getContext('2d'); ctx.fillStyle='#666'; ctx.font='14px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial'; ctx.fillText('No snapshots to display for selected period.',12,24);
             }
@@ -233,7 +253,7 @@
           }
 
           // initial
-          renderChart(SNAP_ALL, nf);
+          await renderChart(SNAP_ALL, nf);
           renderTables(TR_ALL);
           const last = SNAP_ALL[SNAP_ALL.length - 1];
           document.getElementById('last-updated').textContent = last ? `Last: ${last.dateISO}` : '';
