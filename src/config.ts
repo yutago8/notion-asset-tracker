@@ -32,6 +32,7 @@ export const config = {
     dueDate: process.env.TR_PROP_DUE_DATE || 'Due Date',
     transactionType: process.env.TR_PROP_TRANSACTION_TYPE || 'Transaction Type',
     paymentMethod: process.env.TR_PROP_PAYMENT_METHOD || 'Payment Method',
+    externalId: process.env.TR_PROP_EXTERNAL_ID || 'External ID',
   },
 };
 

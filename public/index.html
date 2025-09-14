@@ -100,6 +100,34 @@
         </div>
       </div>
 
+      <hr style="margin:24px 0;"/>
+      <div class="cols">
+        <div class="col">
+          <h3>Quick Input (Transactions)</h3>
+          <div class="muted" style="margin-bottom:6px;">編集用パスワード（WRITE_SECRET）を入力して保存できます。個人運用向けの簡易保護です。</div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+            <input id="admin-secret" type="password" placeholder="WRITE_SECRET" style="padding:6px;" />
+            <button id="btn-save-secret">Set</button>
+            <button id="btn-clear-secret">Clear</button>
+            <span id="secret-status" class="muted"></span>
+          </div>
+          <div style="display:grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap:8px;">
+            <input id="f-title" placeholder="Title" />
+            <input id="f-date" type="date" />
+            <input id="f-amount" type="number" step="1" placeholder="Amount (負は支出)" />
+            <select id="f-type"></select>
+            <input id="f-due" type="date" placeholder="Due Date" />
+            <select id="f-method"></select>
+            <label><input id="f-confirmed" type="checkbox" /> Amount Confirmed</label>
+            <label><input id="f-verified" type="checkbox" /> Verified</label>
+          </div>
+          <div style="margin-top:8px; display:flex; gap:8px;">
+            <button id="btn-submit">Add Transaction</button>
+            <span id="submit-msg" class="muted"></span>
+          </div>
+        </div>
+      </div>
+
       <script>
         async function fetchJSON(url){ const r = await fetch(url); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
         function byDateAsc(a,b){ return (a.dateISO||a.date).localeCompare(b.dateISO||b.date); }
@@ -212,7 +240,54 @@
         }
         main();
       </script>
+      <script>
+        // Quick Input wiring
+        (async function(){
+          const $ = (id)=>document.getElementById(id);
+          const secretKey = 'WRITE_SECRET';
+          const saved = localStorage.getItem(secretKey);
+          if (saved) { $('admin-secret').value = saved; $('secret-status').textContent = 'Secret loaded'; }
+          $('btn-save-secret').onclick = ()=>{ const v=$('admin-secret').value; localStorage.setItem(secretKey, v||''); $('secret-status').textContent = v? 'Secret set':'Secret cleared'; };
+          $('btn-clear-secret').onclick = ()=>{ localStorage.removeItem(secretKey); $('admin-secret').value=''; $('secret-status').textContent = 'Secret cleared'; };
+
+          // fill defaults
+          const today = new Date(); const dstr = today.toISOString().slice(0,10); $('f-date').value = dstr;
+          // meta options
+          try {
+            const meta = await (await fetch('/api/transactions-meta')).json();
+            $('f-type').innerHTML = (meta.transactionTypes||['Expense','Income','Refund']).map(x=>`<option value="${x}">${x}</option>`).join('');
+            const methods = meta.paymentMethods||[]; const opts = methods.map(x=>`<option value="${x}">${x}</option>`).join(''); $('f-method').innerHTML = `<option value="">(none)</option>`+opts;
+          } catch(_) {
+            $('f-type').innerHTML = ['Expense','Income','Refund'].map(x=>`<option value="${x}">${x}</option>`).join(''); $('f-method').innerHTML = `<option value="">(none)</option>`;
+          }
+
+          $('btn-submit').onclick = async ()=>{
+            const title=$('f-title').value?.trim(); const date=$('f-date').value; const amount=Number($('f-amount').value);
+            if(!title||!date||!Number.isFinite(amount)){ $('submit-msg').textContent='title/date/amount は必須です'; return; }
+            const payload = {
+              title,
+              date,
+              amount,
+              transactionType: $('f-type').value || undefined,
+              dueDate: $('f-due').value || undefined,
+              amountConfirmed: $('f-confirmed').checked,
+              verified: $('f-verified').checked,
+              paymentMethod: $('f-method').value || undefined,
+            };
+            const headers = { 'Content-Type':'application/json' };
+            const sec = $('admin-secret').value || localStorage.getItem(secretKey) || '';
+            if (sec) headers['Authorization'] = 'Bearer '+sec;
+            $('btn-submit').disabled = true; $('submit-msg').textContent = 'Saving...';
+            try {
+              const r = await fetch('/api/transactions-create', { method:'POST', headers, body: JSON.stringify(payload) });
+              const j = await r.json();
+              if(!r.ok){ $('submit-msg').textContent = (j.error||'error'); }
+              else { $('submit-msg').textContent = 'Saved ✓'; $('f-title').value=''; $('f-amount').value=''; }
+            } catch(e){ $('submit-msg').textContent = String(e); }
+            finally { $('btn-submit').disabled = false; }
+          };
+        })();
+      </script>
     </div>
   </body>
   </html>
-
