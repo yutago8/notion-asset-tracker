@@ -7,205 +7,212 @@
     <link rel="preconnect" href="https://cdn.jsdelivr.net" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <style>
-      body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 24px; }
-      .header { display:flex; align-items:center; gap:12px; }
-      .muted { color: #666; }
-      .stat { font-size: 14px; margin-right: 16px; }
-      #chart { max-width: 900px; }
+      :root { --fg:#111; --muted:#666; --line:#eee; --accent:#2563eb; }
+      body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 24px; color: var(--fg); }
+      .container { max-width: 1080px; margin: 0 auto; }
+      .header { display:flex; align-items:center; gap:12px; flex-wrap: wrap; }
+      .muted { color: var(--muted); }
+      .controls { margin:10px 0; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+      .controls label { font-size: 14px; }
+      .kpi { margin: 8px 0 12px; }
+      .kpi .value { font-size: 28px; font-weight: 600; }
+      .kpi .sub { font-size: 12px; color:var(--muted); }
+      #chart { width: 100%; max-width: 100%; }
+      table { width:100%; border-collapse: collapse; }
+      td { border-bottom: 1px solid var(--line); padding: 6px 4px; vertical-align: top; }
+      h3 { margin: 8px 0; font-size: 16px; }
+      .cols { display:flex; gap:24px; flex-wrap:wrap; }
+      .col { min-width:320px; flex: 1 1 360px; }
+      @media (max-width: 768px) {
+        body { margin: 16px; }
+        .kpi .value { font-size: 22px; }
+      }
     </style>
   </head>
   <body>
-    <div class="header">
-      <h1 style="margin:0;">Dashboard</h1>
-      <div class="muted" id="last-updated"></div>
-    </div>
-    <div style="margin: 12px 0;">
-      <span class="stat" id="total"></span>
-      <span class="stat" id="change"></span>
-    </div>
-    <canvas id="chart" height="280"></canvas>
-    <hr style="margin:24px 0;"/>
-    <div style="display:flex; gap:24px; flex-wrap:wrap;">
-      <div style="min-width:320px;">
-        <h3 style="margin:8px 0;">This Month – Forecast</h3>
-        <div class="muted" id="forecast-total"></div>
-        <table id="tbl-forecast" border="0" cellpadding="6"></table>
+    <div class="container">
+      <div class="header">
+        <h1 style="margin:0;">Dashboard</h1>
+        <div class="muted" id="last-updated"></div>
       </div>
-      <div style="min-width:320px;">
-        <h3 style="margin:8px 0;">This Month – Cash</h3>
-        <div class="muted" id="cash-total"></div>
-        <table id="tbl-cash" border="0" cellpadding="6"></table>
+      <div class="controls">
+        <label>単位
+          <select id="unit-select">
+            <option value="1">円</option>
+            <option value="1000">千円</option>
+            <option value="10000" selected>万円</option>
+            <option value="1000000">百万円</option>
+          </select>
+        </label>
+        <label>年
+          <select id="year-select"></select>
+        </label>
+        <label>月
+          <select id="month-select">
+            <option value="all">全期間</option>
+            <option value="01">01</option>
+            <option value="02">02</option>
+            <option value="03">03</option>
+            <option value="04">04</option>
+            <option value="05">05</option>
+            <option value="06">06</option>
+            <option value="07">07</option>
+            <option value="08">08</option>
+            <option value="09">09</option>
+            <option value="10">10</option>
+            <option value="11">11</option>
+            <option value="12">12</option>
+          </select>
+        </label>
       </div>
-    </div>
-    <div style="display:flex; gap:24px; flex-wrap:wrap; margin-top:24px;">
-      <div style="min-width:320px;">
-        <h3 style="margin:8px 0;">Next 60 Days – Due</h3>
-        <table id="tbl-due" border="0" cellpadding="6"></table>
+      <div class="kpi">
+        <div class="value" id="kpi-total">—</div>
+        <div class="sub" id="kpi-sub"></div>
       </div>
-      <div style="min-width:320px;">
-        <h3 style="margin:8px 0;">&gt;=10k – Watchlist</h3>
-        <table id="tbl-watch" border="0" cellpadding="6"></table>
+
+      <canvas id="chart" height="280"></canvas>
+      <hr style="margin:24px 0;"/>
+
+      <div class="cols">
+        <div class="col">
+          <h3 id="h-forecast">Forecast</h3>
+          <div class="muted" id="forecast-total"></div>
+          <table id="tbl-forecast" border="0" cellpadding="6"></table>
+        </div>
+        <div class="col">
+          <h3 id="h-cash">Cash</h3>
+          <div class="muted" id="cash-total"></div>
+          <table id="tbl-cash" border="0" cellpadding="6"></table>
+        </div>
       </div>
-      <div style="min-width:320px;">
-        <h3 style="margin:8px 0;">Unconfirmed / To Check</h3>
-        <table id="tbl-unconfirmed" border="0" cellpadding="6"></table>
+      <div class="cols" style="margin-top:24px;">
+        <div class="col">
+          <h3>Next 60 Days – Due</h3>
+          <table id="tbl-due" border="0" cellpadding="6"></table>
+        </div>
+        <div class="col">
+          <h3>&gt;=10k – Watchlist</h3>
+          <table id="tbl-watch" border="0" cellpadding="6"></table>
+        </div>
+        <div class="col">
+          <h3>Unconfirmed / To Check</h3>
+          <table id="tbl-unconfirmed" border="0" cellpadding="6"></table>
+        </div>
       </div>
-    </div>
-    <script>
-      async function fetchJSON(url){ const r = await fetch(url); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
-      function renderTable(el, rows, nf){
-        const th = `<tr class="muted"><td>Date</td><td>Title</td><td style="text-align:right;">Amount</td></tr>`;
-        const tr = rows.map(r=>`<tr><td>${r.date}${r.dueDate?`<div class=muted>due ${r.dueDate}</div>`:''}</td><td>${r.title}</td><td style="text-align:right;">${nf.format(r.amount)}</td></tr>`).join('');
-        el.innerHTML = th + tr;
-      }
-      async function main(){
-        const cfg = await fetchJSON('/api/config');
-        const baseCurrency = cfg.baseCurrency || 'USD';
-        const nf = new Intl.NumberFormat(undefined,{style:'currency',currency:baseCurrency});
 
-        // Snapshots chart
-        const snap = await fetchJSON('/api/snapshots');
-        const all = snap.items || [];
-        const currentYear = String(new Date().getFullYear());
-        const yearItems = all.filter(i => (i.dateISO||'').startsWith(currentYear));
-        const items = yearItems.length ? yearItems : all;
-        const labels = items.map(i=> (i.dateISO||'').slice(5)); // MM-DD for readability
-        const values = items.map(i=>i.totalUSD);
-        const last = all[all.length-1];
-        document.getElementById('last-updated').textContent = last ? `Last: ${last.dateISO}` : '';
-        document.getElementById('total').textContent = last ? `Total: ${nf.format(last.totalUSD)}` : '';
-        const ch = last && typeof last.changeUSD === 'number' ? `${last.changeUSD>=0?'+':''}${nf.format(last.changeUSD)} (${(last.changePct ?? 0).toFixed(2)}%)` : '';
-        document.getElementById('change').textContent = ch;
-        const chartEl = document.getElementById('chart');
-        new Chart(chartEl, {
-          type:'line', data:{ labels, datasets:[{ label:'Total', data:values, borderColor:'#2563eb', backgroundColor:'rgba(37,99,235,0.15)', fill:true, tension:0.2 }]},
-          options:{ responsive:true, plugins:{ legend:{display:false}, title:{ display:true, text: yearItems.length ? `${currentYear} – Total` : 'Total' } }, interaction:{ mode:'index', intersect:false }, scales:{ x:{ ticks:{ callback:(v,idx)=>labels[idx] } }, y:{ ticks:{ callback:v=>nf.format(Number(v)) } } } }
-        });
-        if (!all.length) {
-          const ctx = chartEl.getContext('2d');
-          ctx.fillStyle = '#666';
-          ctx.font = '14px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial';
-          ctx.fillText('No snapshots yet. Add a row in Notion or call /api/cron-snapshot.', 12, 24);
-        }
-
-        // Transactions
-        try{
-          const tr = await fetchJSON('/api/transactions');
-          const items = tr.items || [];
-          const now = new Date();
-          const ym = new Intl.DateTimeFormat('sv-SE',{year:'numeric',month:'2-digit'}).format(now); // YYYY-MM
-          const isThisMonth = (d)=> (d||'').startsWith(ym);
-          const forecast = items.filter(x=> x.amountConfirmed && isThisMonth(x.date));
-          const cash = items.filter(x=> x.verified && isThisMonth(x.date));
-          const due = items.filter(x=> x.isDueSoon).sort((a,b)=> (a.dueDate||'').localeCompare(b.dueDate||''));
-          const watch = items.filter(x=> x.gte10k && (isThisMonth(x.date) || (x.date||'').slice(0,7) === nextMonth(ym)) );
-          const unconfirmed = items.filter(x=> !x.amountConfirmed || (x.dueDate && new Date(x.dueDate) < now));
-
-          document.getElementById('forecast-total').textContent = `Total: ${nf.format(forecast.reduce((s,x)=>s+x.amount,0))}`;
-          document.getElementById('cash-total').textContent = `Total: ${nf.format(cash.reduce((s,x)=>s+x.amount,0))}`;
-          renderTable(document.getElementById('tbl-forecast'), forecast.slice(0,30), nf);
-          renderTable(document.getElementById('tbl-cash'), cash.slice(0,30), nf);
-          renderTable(document.getElementById('tbl-due'), due.slice(0,30), nf);
-          renderTable(document.getElementById('tbl-watch'), watch.slice(0,30), nf);
-          renderTable(document.getElementById('tbl-unconfirmed'), unconfirmed.slice(0,30), nf);
-        }catch(e){
-          console.warn('transactions not available', e);
-        }
-
-        function nextMonth(ym){
-          const [y,m] = ym.split('-').map(Number); const d = new Date(y, m-1, 1); d.setMonth(d.getMonth()+1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-        }
-      }
-      main();
-  </script>
-    <script>
-      (async function(){
-        const unitSel = document.getElementById('unit-select');
-        const yearSel = document.getElementById('year-select');
-        const monthSel = document.getElementById('month-select');
-        if (!unitSel || !yearSel || !monthSel) return;
-
+      <script>
         async function fetchJSON(url){ const r = await fetch(url); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
+        function byDateAsc(a,b){ return (a.dateISO||a.date).localeCompare(b.dateISO||b.date); }
         function fmtNumber(n){ return new Intl.NumberFormat('ja-JP',{ maximumFractionDigits: 2 }).format(n); }
-        function getUnit(){ const div = Number(unitSel.value) || 1; const label = unitSel.options[unitSel.selectedIndex].text; return { div, label }; }
+        function getUnit(){ const sel = document.getElementById('unit-select'); const div = Number(sel.value) || 1; const label = sel.options[sel.selectedIndex].text; return { div, label }; }
         function nextMonth(ym){ const [y,m] = ym.split('-').map(Number); const d = new Date(y, m-1, 1); d.setMonth(d.getMonth()+1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
         function renderTable(el, rows, unit){
           const th = `<tr class="muted"><td>Date</td><td>Title</td><td style="text-align:right;">Amount (${unit.label})</td></tr>`;
-          const tr = rows.map(r=>{
-            const val = (r.amount||0)/unit.div;
-            return `<tr><td>${r.date}${r.dueDate?`<div class=muted>due ${r.dueDate}</div>`:''}</td><td>${r.title}</td><td style="text-align:right;">${fmtNumber(val)}</td></tr>`;
-          }).join('');
+          const tr = rows.map(r=>{ const val = (r.amount||0)/unit.div; return `<tr><td>${r.date}${r.dueDate?`<div class=muted>due ${r.dueDate}</div>`:''}</td><td>${r.title}</td><td style="text-align:right;">${fmtNumber(val)}</td></tr>`; }).join('');
           el.innerHTML = th + tr;
         }
 
-        const cfg = await fetchJSON('/api/config');
-        const nf = new Intl.NumberFormat(undefined,{ style:'currency', currency: cfg.baseCurrency || 'JPY' });
-        const snap = await fetchJSON('/api/snapshots');
-        const SNAP_ALL = (snap.items||[]).slice().sort((a,b)=> (a.dateISO||'').localeCompare(b.dateISO||''));
-        let TR_ALL = [];
-        try { const tr = await fetchJSON('/api/transactions'); TR_ALL = tr.items||[]; } catch(_) {}
+        async function main(){
+          const cfg = await fetchJSON('/api/config');
+          const nf = new Intl.NumberFormat(undefined,{ style:'currency', currency: cfg.baseCurrency || 'JPY' });
 
-        // Fill year select
-        const yearsSet = new Set(SNAP_ALL.map(i=> (i.dateISO||'').slice(0,4)));
-        TR_ALL.forEach(t=> yearsSet.add((t.date||'').slice(0,4)));
-        const years = Array.from(yearsSet).filter(Boolean).sort();
-        const nowY = String(new Date().getFullYear());
-        const effY = years.includes(nowY) ? nowY : (years[years.length-1] || nowY);
-        yearSel.innerHTML = years.map(y=> `<option value="${y}" ${y===effY?'selected':''}>${y}</option>`).join('');
-        const nowM = String(new Date().getMonth()+1).padStart(2,'0');
-        monthSel.value = years.includes(nowY) ? nowM : 'all';
+          // Load data
+          const snap = await fetchJSON('/api/snapshots');
+          const SNAP_ALL = (snap.items || []).sort(byDateAsc);
+          let TR_ALL = [];
+          try { const tr = await fetchJSON('/api/transactions'); TR_ALL = tr.items || []; } catch (_) { TR_ALL = []; }
 
-        unitSel.addEventListener('change', render);
-        yearSel.addEventListener('change', render);
-        monthSel.addEventListener('change', render);
-        render();
-
-        function render(){
-          const unit = getUnit();
-          const year = yearSel.value;
-          const month = monthSel.value; // 'all' or 'MM'
-          // Chart
-          const filteredSn = SNAP_ALL.filter(i=> (i.dateISO||'').startsWith(year+'-')).filter(i=> month==='all' ? true : (i.dateISO||'').slice(5,7)===month);
-          const labels = filteredSn.map(i=> month==='all' ? (i.dateISO||'').slice(5) : (i.dateISO||'').slice(8));
-          const values = filteredSn.map(i=> (i.totalUSD||0)/unit.div);
-          const last = SNAP_ALL[SNAP_ALL.length-1];
-          document.getElementById('last-updated').textContent = last ? `Last: ${last.dateISO}` : '';
-          document.getElementById('total').textContent = last ? `Total: ${nf.format(last.totalUSD)}` : '';
-          const ch = last && typeof last.changeUSD === 'number' ? `${last.changeUSD>=0?'+':''}${nf.format(last.changeUSD)} (${(last.changePct ?? 0).toFixed(2)}%)` : '';
-          document.getElementById('change').textContent = ch;
-          const chartEl = document.getElementById('chart');
-          chartEl.width = chartEl.width; // reset canvas
-          if (filteredSn.length) {
-            new Chart(chartEl, { type:'line', data:{ labels, datasets:[{ label:`Total (${unit.label})`, data:values, borderColor:'#2563eb', backgroundColor:'rgba(37,99,235,0.15)', fill:true, tension:0.2 }]}, options:{ responsive:true, plugins:{ legend:{display:false}, title:{ display:true, text: `${year}${month==='all'?'':'-'+month} – Total (${unit.label})` } }, interaction:{ mode:'index', intersect:false }, scales:{ y:{ ticks:{ callback:v=>`${fmtNumber(Number(v))} ${unit.label}` } } } } });
+          // Current KPI
+          let currentTotal = null; let currentChange = null; let currentFrom = '';
+          try {
+            const comp = await fetchJSON('/api/compute');
+            currentTotal = comp.valuation?.totalUSD ?? null;
+            currentChange = typeof comp.changeUSD === 'number' ? comp.changeUSD : null;
+            currentFrom = 'now';
+          } catch (_) {
+            const last = SNAP_ALL[SNAP_ALL.length - 1];
+            if (last) { currentTotal = last.totalUSD; currentChange = typeof last.changeUSD === 'number' ? last.changeUSD : null; currentFrom = last.dateISO; }
+          }
+          const u0 = getUnit();
+          if (currentTotal != null) {
+            document.getElementById('kpi-total').textContent = nf.format(currentTotal);
+            const sub = `${fmtNumber(currentTotal / u0.div)} ${u0.label}` + (currentChange!=null ? `  (${currentChange>=0?'+':''}${fmtNumber(currentChange / u0.div)} ${u0.label})` : '') + (currentFrom ? ` • as of ${currentFrom}` : '');
+            document.getElementById('kpi-sub').textContent = sub;
           } else {
-            const ctx = chartEl.getContext('2d');
-            ctx.fillStyle = '#666';
-            ctx.font = '14px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial';
-            ctx.fillText('No snapshots to display for selected period.', 12, 24);
+            document.getElementById('kpi-total').textContent = '—';
+            document.getElementById('kpi-sub').textContent = 'No data yet';
           }
 
-          // Transactions
-          const ym = month==='all' ? null : `${year}-${month}`;
-          const now = new Date();
-          const inYear = (d)=> (d||'').startsWith(year+'-');
-          const inYM = (d)=> ym ? (d||'').startsWith(ym) : true;
-          const forecast = TR_ALL.filter(x=> x.amountConfirmed && inYear(x.date) && inYM(x.date));
-          const cash = TR_ALL.filter(x=> x.verified && inYear(x.date) && inYM(x.date));
-          const due = TR_ALL.filter(x=> x.isDueSoon).sort((a,b)=> (a.dueDate||'').localeCompare(b.dueDate||''));
-          const nextYm = ym ? nextMonth(ym) : null;
-          const watch = TR_ALL.filter(x=> x.gte10k && inYear(x.date) && (ym ? (inYM(x.date) || (x.date||'').startsWith(nextYm)) : true));
-          const unconfirmed = TR_ALL.filter(x=> inYear(x.date) && inYM(x.date) && (!x.amountConfirmed || (x.dueDate && new Date(x.dueDate) < now)));
+          // Year/month selectors
+          const yearsSet = new Set(SNAP_ALL.map(i=> (i.dateISO||'').slice(0,4)));
+          if (TR_ALL.length) TR_ALL.forEach(t=> yearsSet.add((t.date||'').slice(0,4)));
+          const years = Array.from(yearsSet).filter(Boolean).sort();
+          const ysel = document.getElementById('year-select');
+          const nowY = String(new Date().getFullYear());
+          const effectiveNowY = years.includes(nowY) ? nowY : (years[years.length-1] || nowY);
+          ysel.innerHTML = years.map(y=>`<option value="${y}" ${y===effectiveNowY?'selected':''}>${y}</option>`).join('');
+          const msel = document.getElementById('month-select');
+          const nowM = String(new Date().getMonth()+1).padStart(2,'0');
+          msel.value = years.includes(nowY) ? nowM : 'all';
 
-          const unitLabel = getUnit();
-          document.getElementById('forecast-total').textContent = `Total: ${fmtNumber(forecast.reduce((s,x)=>s+(x.amount||0),0)/unitLabel.div)} ${unitLabel.label}`;
-          document.getElementById('cash-total').textContent = `Total: ${fmtNumber(cash.reduce((s,x)=>s+(x.amount||0),0)/unitLabel.div)} ${unitLabel.label}`;
-          renderTable(document.getElementById('tbl-forecast'), forecast.slice(0,30), unitLabel);
-          renderTable(document.getElementById('tbl-cash'), cash.slice(0,30), unitLabel);
-          renderTable(document.getElementById('tbl-due'), due.slice(0,30), unitLabel);
-          renderTable(document.getElementById('tbl-watch'), watch.slice(0,30), unitLabel);
-          renderTable(document.getElementById('tbl-unconfirmed'), unconfirmed.slice(0,30), unitLabel);
+          document.getElementById('unit-select').addEventListener('change', () => {
+            const u=getUnit(); if (currentTotal!=null){ document.getElementById('kpi-sub').textContent = `${fmtNumber(currentTotal/u.div)} ${u.label}` + (currentChange!=null?`  (${currentChange>=0?'+':''}${fmtNumber(currentChange/u.div)} ${u.label})`: '') + (currentFrom?` • as of ${currentFrom}`:''); }
+            renderChart(SNAP_ALL, nf); renderTables(TR_ALL);
+          });
+          ysel.addEventListener('change', () => { renderChart(SNAP_ALL, nf); renderTables(TR_ALL); updateHeadings(); });
+          msel.addEventListener('change', () => { renderChart(SNAP_ALL, nf); renderTables(TR_ALL); updateHeadings(); });
+
+          function updateHeadings(){
+            const year = ysel.value, month = msel.value; const ym = month==='all' ? year : `${year}-${month}`;
+            document.getElementById('h-forecast').textContent = `Forecast – ${ym}`;
+            document.getElementById('h-cash').textContent = `Cash – ${ym}`;
+          }
+
+          function renderChart(SNAPS, nf){
+            const year = ysel.value; const month = msel.value;
+            const filtered = SNAPS.filter(i=> (i.dateISO||'').startsWith(year+'-')).filter(i=> month==='all' ? true : (i.dateISO||'').slice(5,7)===month);
+            const labels = filtered.map(i=> month==='all' ? (i.dateISO||'').slice(5) : (i.dateISO||'').slice(8));
+            const u = getUnit();
+            const values = filtered.map(i=> (i.totalUSD||0)/u.div);
+            const chartEl = document.getElementById('chart');
+            chartEl.width = chartEl.width; // reset
+            if (filtered.length) {
+              new Chart(chartEl, { type:'line', data:{ labels, datasets:[{ label:`Total (${u.label})`, data:values, borderColor:varAccent(), backgroundColor:'rgba(37,99,235,0.15)', fill:true, tension:0.2 }]}, options:{ responsive:true, plugins:{ legend:{display:false}, title:{ display:true, text: `${year}${month==='all'?'':'-'+month} – Total (${u.label})` } }, interaction:{ mode:'index', intersect:false }, scales:{ y:{ ticks:{ callback:v=>`${fmtNumber(Number(v))} ${u.label}` } } } } });
+            } else {
+              const ctx = chartEl.getContext('2d'); ctx.fillStyle='#666'; ctx.font='14px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial'; ctx.fillText('No snapshots to display for selected period.',12,24);
+            }
+          }
+
+          function varAccent(){ return getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#2563eb'; }
+
+          function renderTables(TR){
+            const year = ysel.value; const month = msel.value; const ym = month==='all'? null : `${year}-${month}`;
+            const now = new Date(); const inYear = d => (d||'').startsWith(year+'-'); const inYM = d => ym ? (d||'').startsWith(ym) : true;
+            const u = getUnit();
+            const forecast = TR.filter(x=> x.amountConfirmed && inYear(x.date) && inYM(x.date));
+            const cash = TR.filter(x=> x.verified && inYear(x.date) && inYM(x.date));
+            const due = TR.filter(x=> x.isDueSoon).sort((a,b)=> (a.dueDate||'').localeCompare(b.dueDate||''));
+            const nextYm = ym ? nextMonth(ym) : null;
+            const watch = TR.filter(x=> x.gte10k && inYear(x.date) && (ym ? (inYM(x.date) || (x.date||'').startsWith(nextYm)) : true));
+            const unconfirmed = TR.filter(x=> inYear(x.date) && inYM(x.date) && (!x.amountConfirmed || (x.dueDate && new Date(x.dueDate) < now)));
+            document.getElementById('forecast-total').textContent = `Total: ${fmtNumber(forecast.reduce((s,x)=>s+(x.amount||0),0)/u.div)} ${u.label}`;
+            document.getElementById('cash-total').textContent = `Total: ${fmtNumber(cash.reduce((s,x)=>s+(x.amount||0),0)/u.div)} ${u.label}`;
+            renderTable(document.getElementById('tbl-forecast'), forecast.slice(0,30), u);
+            renderTable(document.getElementById('tbl-cash'), cash.slice(0,30), u);
+            renderTable(document.getElementById('tbl-due'), due.slice(0,30), u);
+            renderTable(document.getElementById('tbl-watch'), watch.slice(0,30), u);
+            renderTable(document.getElementById('tbl-unconfirmed'), unconfirmed.slice(0,30), u);
+          }
+
+          // initial
+          renderChart(SNAP_ALL, nf);
+          renderTables(TR_ALL);
+          const last = SNAP_ALL[SNAP_ALL.length - 1];
+          document.getElementById('last-updated').textContent = last ? `Last: ${last.dateISO}` : '';
         }
-      })();
-    </script>
+        main();
+      </script>
+    </div>
   </body>
   </html>
+
