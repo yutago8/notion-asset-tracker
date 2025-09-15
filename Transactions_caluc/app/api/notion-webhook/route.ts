@@ -28,6 +28,7 @@ function getLogProps(): LogProps {
     date: process.env.ALOG_PROP_DATE || 'Date',
     assetType: process.env.ALOG_PROP_ASSET_TYPE || 'Asset Type',
     number: process.env.ALOG_PROP_NUMBER || 'Number',
+    updated: process.env.ALOG_PROP_UPDATED || '_updated',
   };
 }
 
@@ -53,6 +54,33 @@ export async function POST(req: NextRequest) {
     const notion = new Client({ auth: NOTION_TOKEN });
     const txp = getTxProps();
     const lgp = getLogProps();
+    // New: if Asset Log has pending dates (_updated=false), process them first
+    try {
+      const balanceProp = process.env.ALOG_PROP_BALANCE || 'Balance';
+      await ensureAssetLogProps(notion, ASSET_LOG_DB_ID, { ...lgp, balance: balanceProp });
+      const pending = await fetchPendingDates(notion, ASSET_LOG_DB_ID, lgp);
+      if (pending.length) {
+        const assetTypes = (process.env.ASSET_TYPES || '日常口座,貯蓄口座,SBI')
+          .split(',').map(s=>s.trim()).filter(Boolean);
+        let rows = 0; const processed: string[] = [];
+        for (const dateISO of pending) {
+          const sums = await sumByAssetTypeUpToDate(notion, TRANSACTIONS_DB_ID, txp, dateISO, assetTypes);
+          const existing = await fetchAssetLogByDate(notion, ASSET_LOG_DB_ID, lgp, dateISO);
+          const byAt = new Map(existing.map(e=> [e.assetType, e.id]));
+          for (const at of assetTypes) {
+            const val = round2(sums.get(at) || 0);
+            const props: any = { [lgp.date]: { date: { start: dateISO } }, [lgp.assetType]: { select: { name: at } }, [lgp.number]: { number: val } };
+            const id = byAt.get(at);
+            if (id) await notion.pages.update({ page_id: id, properties: props } as any);
+            else await notion.pages.create({ parent: { database_id: ASSET_LOG_DB_ID }, properties: props } as any);
+            rows++;
+          }
+          await markDateUpdated(notion, ASSET_LOG_DB_ID, lgp, dateISO);
+          processed.push(dateISO);
+        }
+        return NextResponse.json({ ok: true, mode: 'pending-dates', processedDates: processed, rows });
+      }
+    } catch { /* fallback to legacy path below */ }
     const body = await req.json().catch(() => ({} as any));
     const pageId: string | undefined = body?.page_id;
 
@@ -256,11 +284,101 @@ async function ensureAssetLogProps(
     const hasNumber = !!props[p.number];
     const hasAssetType = !!props[p.assetType];
     const hasBalance = !!props[p.balance];
+    const hasUpdated = !!props[p.updated];
     if (!hasBalance) {
       await notion.databases.update({ database_id: dbId, properties: { [p.balance]: { number: {} } } } as any);
+    }
+    if (!hasUpdated) {
+      await notion.databases.update({ database_id: dbId, properties: { [p.updated]: { checkbox: {} } } } as any);
     }
     // If missing Number/Asset Type we don't auto-add (既存スキーマが異なる場合は.envで上書き)
   } catch {
     /* ignore */
   }
+}
+
+async function fetchPendingDates(notion: Client, dbId: string, p: LogProps) {
+  const dates = new Set<string>();
+  let cursor: string | undefined;
+  do {
+    const res = await notion.databases.query({
+      database_id: dbId,
+      start_cursor: cursor,
+      page_size: 100,
+      sorts: [{ property: p.date, direction: 'ascending' }],
+      filter: { property: p.updated, checkbox: { equals: false } } as any,
+    } as any);
+    for (const page of (res.results||[])) {
+      const d = toISODate((page as any).properties?.[p.date]?.date?.start);
+      if (d) dates.add(d);
+    }
+    cursor = (res as any).next_cursor || undefined;
+  } while (cursor);
+  return Array.from(dates).sort();
+}
+
+async function fetchAssetLogByDate(notion: Client, dbId: string, p: LogProps, dateISO: string) {
+  const items: Array<{ id: string; assetType: string }> = [];
+  let cursor: string | undefined;
+  do {
+    const res = await notion.databases.query({
+      database_id: dbId,
+      start_cursor: cursor,
+      page_size: 100,
+      filter: { property: p.date, date: { equals: dateISO } } as any,
+    } as any);
+    for (const page of (res.results||[])) {
+      const at = (page as any).properties?.[p.assetType]?.select?.name as string | undefined;
+      if (at) items.push({ id: (page as any).id as string, assetType: at });
+    }
+    cursor = (res as any).next_cursor || undefined;
+  } while (cursor);
+  return items;
+}
+
+async function markDateUpdated(notion: Client, dbId: string, p: LogProps, dateISO: string) {
+  let cursor: string | undefined;
+  do {
+    const res = await notion.databases.query({
+      database_id: dbId,
+      start_cursor: cursor,
+      page_size: 100,
+      filter: { and: [ { property: p.date, date: { equals: dateISO } }, { property: p.updated, checkbox: { equals: false } } ] } as any,
+    } as any);
+    for (const page of (res.results||[])) {
+      await notion.pages.update({ page_id: (page as any).id, properties: { [p.updated]: { checkbox: true } } } as any);
+    }
+    cursor = (res as any).next_cursor || undefined;
+  } while (cursor);
+}
+
+async function sumByAssetTypeUpToDate(
+  notion: Client,
+  txDbId: string,
+  p: TxProps,
+  dateISO: string,
+  assetTypes: string[],
+) {
+  const map = new Map<string, number>();
+  let cursor: string | undefined;
+  do {
+    const res = await notion.databases.query({
+      database_id: txDbId,
+      start_cursor: cursor,
+      page_size: 100,
+      filter: { and: [
+        { or: [ { property: p.confirmed, checkbox: { equals: true } }, { property: p.verified, checkbox: { equals: true } } ] },
+        { property: p.date, date: { on_or_before: dateISO } },
+      ] } as any,
+    } as any);
+    for (const page of (res.results||[])) {
+      const at = (page as any).properties?.[p.assetType]?.select?.name as string | undefined;
+      const amt = (page as any).properties?.[p.amount]?.number as number | undefined;
+      if (typeof amt !== 'number' || !isFinite(amt)) continue;
+      const key = assetTypes.includes(at || '') ? (at as string) : undefined;
+      if (key) map.set(key, (map.get(key) || 0) + amt);
+    }
+    cursor = (res as any).next_cursor || undefined;
+  } while (cursor);
+  return map;
 }
