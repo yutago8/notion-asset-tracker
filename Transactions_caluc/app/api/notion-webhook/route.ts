@@ -31,7 +31,7 @@ function getLogProps(): LogProps {
   };
 }
 
-function toISO(s?: string | null): string | undefined {
+function toISODate(s?: string | null): string | undefined {
   if (!s) return undefined;
   try { return new Date(s).toISOString().slice(0,10); } catch { return undefined; }
 }
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
         const page = await notion.pages.retrieve({ page_id: pageId } as any);
         const date = (page as any).properties?.[txp.date]?.date?.start as string | undefined;
         const aType = (page as any).properties?.[txp.assetType]?.select?.name as string | undefined;
-        const base = toISO(date) || new Date().toISOString().slice(0,10);
+        const base = toISODate(date) || new Date().toISOString().slice(0,10);
         const d = new Date(base);
         const from = new Date(d); from.setDate(d.getDate() - 30);
         const to = new Date(d); to.setDate(d.getDate() + 30);
@@ -186,7 +186,7 @@ async function fetchTransactions(
       sorts: [{ property: p.date, direction: 'ascending' }],
     } as any);
     for (const page of (res.results as any[])) {
-      const date = toISO(page?.properties?.[p.date]?.date?.start) as string | undefined;
+      const date = toISODate(page?.properties?.[p.date]?.date?.start) as string | undefined;
       const amt = page?.properties?.[p.amount]?.number as number | undefined;
       const pm = page?.properties?.[p.paymentMethod]?.select?.name as string | undefined;
       const at = page?.properties?.[p.assetType]?.select?.name as string | undefined;
@@ -214,7 +214,7 @@ async function fetchAssetLogRange(
   do {
     const res = await notion.databases.query({ database_id: dbId, start_cursor: cursor, page_size: 100, filter } as any);
     for (const page of (res.results as any[])) {
-      const date = toISO(page?.properties?.[p.date]?.date?.start);
+      const date = toISODate(page?.properties?.[p.date]?.date?.start);
       const assetType = page?.properties?.[p.assetType]?.select?.name as string | undefined;
       if (!date || !assetType) continue;
       items.push({ id: page.id as string, date, assetType });
